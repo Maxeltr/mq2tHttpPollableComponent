@@ -29,6 +29,8 @@ import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import org.apache.commons.lang3.StringUtils;
+import org.json.JSONObject;
 import ru.maxeltr.mq2tLib.Mq2tPollableComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,35 +48,53 @@ public class Mq2tHttpPollableComponent implements Mq2tPollableComponent {
     private static final HttpClient client = HttpClient.newHttpClient();
 
     @Override
-    public String getData() {
-        HttpRequest request;
-        try {
-            request = HttpRequest.newBuilder()
-                    .uri(new URI("http://" + ConfigLoader.loadConfig().getProperty("url", ""))) //TODO several urls
-                    .GET()
-                    .build();
-        } catch (URISyntaxException ex) {
-            logger.debug("Could not create request.", ex);
-            return "";
-        }
-
-        HttpResponse<String> response;
-        try {
-            response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                logger.debug("Received non-200 response: {}", response.statusCode());
+    public String getData(String... urls) {
+        JSONObject responses = new JSONObject();
+        for (String url : urls) {
+            if (Thread.currentThread().isInterrupted()) {		//add test is it nesessary
+                logger.info("Thread was interrupted stopping further processing.");
                 return "";
             }
-            return response.body();
-        } catch (IOException ex) {
-            logger.debug("Could not send request.", ex);
-            return "";
-        } catch (InterruptedException ex) {
-            logger.debug("Request was interrupted.", ex);
-            Thread.currentThread().interrupt();
+
+            if (StringUtils.isEmpty(url)) {
+                logger.warn("Skipping empty URL");
+                continue;
+            }
+            url = url.trim();
+
+            HttpRequest request;
+            try {
+                request = HttpRequest.newBuilder()
+                        .uri(new URI(url))
+                        .GET()
+                        .build();
+            } catch (URISyntaxException ex) {
+                logger.error("Could not create request for URL={}.", url, ex);
+                continue;
+            }
+
+            HttpResponse<String> response;
+            try {
+                response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() == 200) {
+                    String contentType = response.headers().firstValue("Content-Type").orElse("");
+                    JSONObject responseObject = new JSONObject();
+                    responseObject.put("contentType", contentType);
+                    responseObject.put("body", response.body());
+                    responses.put(url, responseObject);
+                } else {
+                    logger.warn("Received non-200 response={} from URL={}", response.statusCode(), url);
+                }
+            } catch (IOException ex) {
+                logger.warn("Could not send request to URL={}.", url, ex);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                logger.info("Request was interrupted. URL={}", url, ex);
+                return "";
+            }
         }
 
-        return "";
+        return responses.toString();
     }
 
     @Override
@@ -84,6 +104,7 @@ public class Mq2tHttpPollableComponent implements Mq2tPollableComponent {
 
     @Override
     public void shutdown() {
-        logger.info("Shutting down mq2tHttpPollableComponent.");
+        logger.info(String.format("Shutting down %s.", COMPONENT_NAME));
+        Thread.currentThread().interrupt();
     }
 }
