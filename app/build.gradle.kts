@@ -3,6 +3,7 @@
 plugins {
     // Apply the application plugin to add support for building a CLI application in Java.
     application
+    id("com.github.johnrengelman.shadow") version "8.1.0"
 }
 
 repositories {
@@ -13,6 +14,7 @@ repositories {
 dependencies {
     implementation(project(":mq2tLib"))
     implementation("org.slf4j:slf4j-api:2.0.17")
+    implementation("org.apache.commons:commons-lang3:3.12.0")
 
 }
 
@@ -28,9 +30,8 @@ application {
     mainClass = "ru.maxeltr.mq2tHttpPollableComponent.Main"
 }
 
-tasks.jar {
-    // jar name = component name
-    archiveBaseName.set("mq2tHttpPollableComponent")
+tasks.shadowJar {
+  archiveBaseName = "mq2tHttpPollableComponent"
+  archiveClassifier = ""
 }
-
 

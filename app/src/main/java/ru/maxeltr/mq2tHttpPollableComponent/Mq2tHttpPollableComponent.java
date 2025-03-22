@@ -30,7 +30,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import org.apache.commons.lang3.StringUtils;
-import org.json.JSONObject;
 import ru.maxeltr.mq2tLib.Mq2tPollableComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,52 +48,40 @@ public class Mq2tHttpPollableComponent implements Mq2tPollableComponent {
 
     @Override
     public String getData(String... urls) {
-        JSONObject responses = new JSONObject();
-        for (String url : urls) {
-            if (Thread.currentThread().isInterrupted()) {		//add test is it nesessary
-                logger.info("Thread was interrupted stopping further processing.");
-                return "";
-            }
+        String url = urls[0];
+        if (StringUtils.isEmpty(url)) {
+            logger.warn("Error. Empty URL.");
+            return "";
+        }
+        url = url.trim();
 
-            if (StringUtils.isEmpty(url)) {
-                logger.warn("Skipping empty URL");
-                continue;
-            }
-            url = url.trim();
-
-            HttpRequest request;
-            try {
-                request = HttpRequest.newBuilder()
-                        .uri(new URI(url))
-                        .GET()
-                        .build();
-            } catch (URISyntaxException ex) {
-                logger.error("Could not create request for URL={}.", url, ex);
-                continue;
-            }
-
-            HttpResponse<String> response;
-            try {
-                response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                if (response.statusCode() == 200) {
-                    String contentType = response.headers().firstValue("Content-Type").orElse("");
-                    JSONObject responseObject = new JSONObject();
-                    responseObject.put("contentType", contentType);
-                    responseObject.put("body", response.body());
-                    responses.put(url, responseObject);
-                } else {
-                    logger.warn("Received non-200 response={} from URL={}", response.statusCode(), url);
-                }
-            } catch (IOException ex) {
-                logger.warn("Could not send request to URL={}.", url, ex);
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                logger.info("Request was interrupted. URL={}", url, ex);
-                return "";
-            }
+        HttpRequest request;
+        try {
+            request = HttpRequest.newBuilder()
+                    .uri(new URI(url))
+                    .GET()
+                    .build();
+        } catch (URISyntaxException ex) {
+            logger.error("Could not create request for URL={}.", url, ex);
+            return "";
         }
 
-        return responses.toString();
+        HttpResponse<String> response;
+        try {
+            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                return response.body();
+            } else {
+                logger.warn("Received non-200 response={} from URL={}", response.statusCode(), url);
+            }
+        } catch (IOException ex) {
+            logger.warn("Could not send request to URL={}.", url, ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            logger.info("Request was interrupted. URL={}", url, ex);
+        }
+
+        return "";
     }
 
     @Override
